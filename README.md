@@ -1,6 +1,6 @@
 # 文颜 MCP Server
 
-<video src="data/intro.mp4" controls></video>
+https://github.com/user-attachments/assets/2c355f76-f313-48a7-9c31-f0f69e5ec207
 
 ## Overview
 
