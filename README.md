@@ -6,6 +6,10 @@ https://github.com/user-attachments/assets/2c355f76-f313-48a7-9c31-f0f69e5ec207
 
 文颜 MCP Server 是一个基于模型上下文协议（Model Context Protocol, MCP）的服务器组件，支持将 Markdown 格式的文章发布至微信公众号草稿箱，并使用与 [文颜](https://yuzhi.tech/wenyan) 相同的主题系统进行排版。
 
+使用场景：
+
+- [让AI帮你管理公众号的排版和发布](https://babyno.top/posts/2025/06/let-ai-help-you-manage-your-gzh-layout-and-publishing/)
+
 ## Features
 
 - 列出并选择支持的文章主题
