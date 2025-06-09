@@ -8,6 +8,8 @@ const publishUrl = "https://api.weixin.qq.com/cgi-bin/draft/add";
 const uploadUrl = `https://api.weixin.qq.com/cgi-bin/material/add_material`;
 const appId = process.env.WECHAT_APP_ID || "";
 const appSecret = process.env.WECHAT_APP_SECRET || "";
+const hostImagePath = process.env.HOST_IMAGE_PATH || "";
+const dockerImagePath = "/mnt/host-downloads";
 
 type UploadResponse = {
     media_id: string;
@@ -50,18 +52,21 @@ async function uploadMaterial(type: string, fileData: Blob | File, fileName: str
     return data;
 }
 
-async function uploadImage(imageUrl: string, accessToken: string): Promise<UploadResponse> {
+async function uploadImage(imageUrl: string, accessToken: string, fileName?: string): Promise<UploadResponse> {
     if (imageUrl.startsWith("http")) {
         const response = await fetch(imageUrl);
         if (!response.ok || !response.body) {
             throw new Error(`Failed to download image from URL: ${imageUrl}`);
         }
-        const fileName = path.basename(imageUrl.split("?")[0]);
+        const fileNameFromUrl = path.basename(imageUrl.split("?")[0]);
+        const ext = path.extname(fileNameFromUrl);
+        const imageName = fileName ?? (ext === "" ? `${fileNameFromUrl}.jpg` : fileNameFromUrl);
         const buffer = await response.arrayBuffer();
-        return await uploadMaterial('image', new Blob([buffer]), fileName, accessToken);
+        return await uploadMaterial('image', new Blob([buffer]), imageName, accessToken);
     } else {
-        const fileName = path.basename(imageUrl);
-        const file = await fileFromPath(imageUrl);
+        const localImagePath = hostImagePath ? imageUrl.replace(hostImagePath, dockerImagePath) : imageUrl;
+        const fileName = path.basename(localImagePath);
+        const file = await fileFromPath(localImagePath);
         return await uploadMaterial('image', file, fileName, accessToken);
     }
 }
@@ -72,10 +77,14 @@ async function uploadImages(content: string, accessToken: string): Promise<strin
     const images = Array.from(document.querySelectorAll('img'));
     const uploadPromises = images.map(async (element) => {
         const dataSrc = element.getAttribute('src');
-        if (dataSrc && !dataSrc.startsWith('https://mmbiz.qpic.cn')) {
-            const resp = await uploadImage(dataSrc, accessToken);
-            element.setAttribute('src', resp.url);
-            return resp.media_id;
+        if (dataSrc) {
+            if (!dataSrc.startsWith('https://mmbiz.qpic.cn')) {
+                const resp = await uploadImage(dataSrc, accessToken);
+                element.setAttribute('src', resp.url);
+                return resp.media_id;
+            } else {
+                return dataSrc;
+            }
         }
         return null;
     });
@@ -91,10 +100,15 @@ export async function publishToDraft(title: string, content: string, cover: stri
         const firstImageId = await uploadImages(content, accessToken.access_token);
         let thumbMediaId = "";
         if (cover) {
-            const resp = await uploadImage(cover, accessToken.access_token);
+            const resp = await uploadImage(cover, accessToken.access_token, "cover.jpg");
             thumbMediaId = resp.media_id;
         } else {
-            thumbMediaId = firstImageId;
+            if (firstImageId.startsWith("https://mmbiz.qpic.cn")) {
+                const resp = await uploadImage(firstImageId, accessToken.access_token, "cover.jpg");
+                thumbMediaId = resp.media_id;
+            } else {
+                thumbMediaId = firstImageId;
+            }
         }
         if (!thumbMediaId) {
             throw new Error("你必须指定一张封面图或者在正文中至少出现一张图片。");

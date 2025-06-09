@@ -17,36 +17,33 @@ https://github.com/user-attachments/assets/2c355f76-f313-48a7-9c31-f0f69e5ec207
 - 发布文章到微信公众号草稿箱
 - 自动上传本地或网络图片
 
-## Installation
+---
 
-### Prerequisites
+## 使用方式
 
-确保已安装 [Node.js](https://nodejs.org/) 环境。
+### 方式一：本地运行
 
-### Clone 仓库
+#### 编译
+
+确保已安装 [Node.js](https://nodejs.org/) 环境：
 
 ```bash
 git clone https://github.com/caol64/wenyan-mcp.git
 cd wenyan-mcp
-```
 
-### 构建项目
-
-```bash
 npm install
-npm run build
+npx tsc -b && npm run copy-assets
 ```
 
-## Integration
+#### 与 MCP Client 集成
 
-在你的 MCP 配置文件中加入以下内容来启用文颜 MCP Server：
+在你的 MCP 配置文件中加入以下内容：
 
 ```json
 {
   "mcpServers": {
     "wenyan-mcp": {
       "name": "公众号助手",
-      "type": "stdio",
       "command": "node",
       "args": [
         "Your/path/to/wenyan-mcp/dist/index.js"
@@ -60,52 +57,111 @@ npm run build
 }
 ```
 
-请注意`WECHAT_APP_ID`和`WECHAT_APP_SECRET`两个环境变量。
+> 说明：
+>
+> * `WECHAT_APP_ID` 微信公众号平台的 App ID
+> * `WECHAT_APP_SECRET` 微信平台的 App Secret
+
+---
+
+### 方式二：使用 Docker 运行（推荐）
+
+适合部署到服务器环境，或与本地 AI 工具链集成。
+
+#### 构建镜像
+
+```bash
+docker build -t wenyan-mcp .
+```
+
+#### 与 MCP Client 集成
+
+在你的 MCP 配置文件中加入以下内容：
+
+```json
+{
+  "mcpServers": {
+    "wenyan-mcp": {
+      "name": "公众号助手",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/your/host/image/path:/mnt/host-downloads",
+        "-e", "WECHAT_APP_ID=your_app_id",
+        "-e", "WECHAT_APP_SECRET=your_app_secret",
+        "-e", "HOST_IMAGE_PATH=/your/host/image/path",
+        "wenyan-mcp"
+      ]
+    }
+  }
+}
+```
+
+> 说明：
+>
+> * `-v` 挂载宿主机目录，使容器内部可以访问本地图片。与环境变量`HOST_IMAGE_PATH`保持一致。你的 `Markdown` 文章内的本地图片应该都放置在该目录中，docker会自动将它们映射到容器内。容器无法读取在该目录以外的图片。
+> * `-e` 注入docker容器的环境变量：
+> * `WECHAT_APP_ID` 微信公众号平台的 App ID
+> * `WECHAT_APP_SECRET` 微信平台的 App Secret
+> * `HOST_IMAGE_PATH` 宿主机图片目录
+
+---
 
 ## 微信公众号 IP 白名单
 
 请务必将服务器 IP 加入公众号平台的 IP 白名单，以确保上传接口调用成功。
 详细配置说明请参考：[https://yuzhi.tech/docs/wenyan/upload](https://yuzhi.tech/docs/wenyan/upload)
 
-## 配置说明
+---
+
+## 配置说明（Frontmatter）
 
 为了可以正确上传文章，需要在每一篇 Markdown 文章的开头添加一段`frontmatter`，提供`title`、`cover`两个字段：
 
-```
+```md
 ---
 title: 在本地跑一个大语言模型(2) - 给模型提供外部知识库
 cover: /Users/lei/Downloads/result_image.jpg
 ---
 ```
 
-- `title`是文章标题，必填。
-- `cover`是文章封面，分为两种情况：
-  - 如果正文里有至少一张图片，可以省略，此时会将正文中的一张图片作为封面
-  - 如果正文里没有图片，则`cover`不能省略
+* `title` 是文章标题，必填。
+* `cover` 是文章封面，支持本地路径和网络图片：
+
+  * 如果正文有至少一张图片，可省略，此时将使用其中一张作为封面；
+  * 如果正文无图片，则必须提供 cover。
+
+---
 
 ## 关于图片自动上传
 
-无论是cover还是正文中的图片，都支持本地格式（/Users/lei/Downloads/result_image.jpg）和网络格式（https://example.com/result_image.jpg）。
+* 支持图片路径：
 
-## 文章示例
+  * 本地路径（如：`/Users/lei/Downloads/result_image.jpg`）
+  * 网络路径（如：`https://example.com/image.jpg`）
 
-```markdown
+---
+
+## 示例文章格式
+
+```md
 ---
 title: 在本地跑一个大语言模型(2) - 给模型提供外部知识库
 description: Make your local large language models (LLMs) smarter! This guide shows how to use LangChain and RAG to let them retrieve data from external knowledge bases, improving answer accuracy.
 cover: /Users/lei/Downloads/result_image.jpg
 ---
-在[上一篇文章](https://babyno.top/posts/2024/02/running-a-large-language-model-locally/)里，我们展示了如何通过Ollama这款工具，在本地运行大型语言模型。本篇文章将着重介绍下如何让模型从外部知识库中检索定制数据，来提升大型语言模型的准确性，让它看起来更“智能”。
 
-本篇文章将涉及到`LangChain`和`RAG`两个概念，在本文中不做详细解释。
+在[上一篇文章](https://babyno.top/posts/2024/02/running-a-large-language-model-locally/)中，我们展示了如何在本地运行大型语言模型。本篇将介绍如何让模型从外部知识库中检索定制数据，提升答题准确率，让它看起来更“智能”。
 
 ## 准备模型
 
-访问`Ollama`的模型页面，搜索`qwen`，我们这次将使用对中文语义了解的更好的“[通义千问](https://ollama.com/library/qwen:7b)”模型进行实验。
+访问 `Ollama` 的模型页面，搜索 `qwen`，我们使用支持中文语义的“[通义千问](https://ollama.com/library/qwen:7b)”模型进行实验。
 
 ![](https://mmbiz.qpic.cn/mmbiz_jpg/Jsq9IicjScDVUjkPc6O22ZMvmaZUzof5bLDjMyLg2HeAXd0icTvlqtL7oiarSlOicTtiaiacIxpVOV1EeMKl96PhRPPw/640?wx_fmt=jpeg)
 ```
 
 ---
 
-如需更多功能扩展或反馈建议，欢迎提[issue](https://github.com/caol64/wenyan-mcp/issues)。
+如需更多功能扩展或反馈建议，欢迎提 [issue](https://github.com/caol64/wenyan-mcp/issues)。
