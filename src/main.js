@@ -7,6 +7,12 @@ import { readFile } from "fs/promises";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { JSDOM } from "jsdom";
+import { mathjax } from 'mathjax-full/js/mathjax.js';
+import { TeX } from 'mathjax-full/js/input/tex.js';
+import { SVG } from 'mathjax-full/js/output/svg.js';
+import { liteAdaptor } from 'mathjax-full/js/adaptors/liteAdaptor.js';
+import { RegisterHTMLHandler } from 'mathjax-full/js/handlers/html.js';
+import { AllPackages } from 'mathjax-full/js/input/tex/AllPackages.js';
 
 const serif =
     "ui-serif, Georgia, Cambria, 'Noto Serif', 'Times New Roman', serif";
@@ -14,6 +20,36 @@ const sansSerif =
     "ui-sans-serif, system-ui, 'Apple Color Emoji', 'Segoe UI', 'Segoe UI Symbol', 'Noto Sans', 'Roboto', sans-serif";
 const monospace =
     "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Roboto Mono', 'Courier New', 'Microsoft YaHei', monospace";
+
+const texConfig = {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true,
+    packages: AllPackages.sort().join(', ').split(/\s*,\s*/)
+};
+
+const svgConfig = {
+    fontCache: 'none'
+};
+
+const adaptor = liteAdaptor();
+RegisterHTMLHandler(adaptor);
+const tex = new TeX(texConfig);
+const svg = new SVG(svgConfig);
+
+async function renderMathInHtml(htmlString) {
+    try {
+        const html = mathjax.document(htmlString, {
+            InputJax: tex,
+            OutputJax: svg
+        });
+        html.render();
+        return adaptor.outerHTML(adaptor.root(html.document))
+    } catch (error) {
+        console.error("Error rendering MathJax:", error);
+        throw error;
+    }
+}
 
 export function initMarkdownRenderer() {
     // ----------- 代码高亮 -----------
@@ -125,6 +161,7 @@ export function handleFrontMatter(markdown) {
 
 export async function renderMarkdown(content, themeId) {
     const html = marked.parse(content);
+    const htmlWithMath = await renderMathInHtml(html);
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const themeCssPath = join(__dirname, `themes/${themeId}.css`);
     const themeCss = await readFile(themeCssPath, "utf8");
@@ -152,7 +189,7 @@ export async function renderMarkdown(content, themeId) {
     const highlightCss = await readFile(highlightCssPath, "utf8");
     const macStyleCssPath = join(__dirname, "mac_style.css");
     const macStyleCss = await readFile(macStyleCssPath, "utf8");
-    return await getContentForGzh(html, customCss, highlightCss, macStyleCss);
+    return await getContentForGzh(htmlWithMath, customCss, highlightCss, macStyleCss);
 }
 
 async function getContentForGzh(html, customCss, highlightCss, macStyleCss) {
