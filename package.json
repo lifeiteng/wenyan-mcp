@@ -14,7 +14,8 @@
     "build": "tsc -b && pnpm copy-assets",
     "copy-assets": "cp src/main.js dist/main.js && cp -r src/themes dist/themes && cp -r src/highlight dist/highlight",
     "watch": "tsc --watch",
-    "inspector": "pnpx @modelcontextprotocol/inspector node dist/index.js"
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "test": "npx vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.6.0",
@@ -24,12 +25,14 @@
     "highlight.js": "^11.11.1",
     "jsdom": "^26.1.0",
     "marked": "^15.0.12",
-    "marked-highlight": "^2.2.1"
+    "marked-highlight": "^2.2.1",
+    "mathjax-full": "^3.2.2"
   },
   "devDependencies": {
     "@types/css-tree": "^2.3.10",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^20.11.24",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.3"
   }
 }

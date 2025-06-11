@@ -182,13 +182,6 @@ font-weight: bold;
     vertical-align: middle;
 }
 /* 列表 */
-::marker {
-  color: var(--element-color-deep);
-}
-
-li.md-list-item {
-  margin: 0.4rem 0;
-}
 
 #wenyan ol {
   margin-left: 2px;
