@@ -10,6 +10,10 @@ https://github.com/user-attachments/assets/2c355f76-f313-48a7-9c31-f0f69e5ec207
 
 - [让AI帮你管理公众号的排版和发布](https://babyno.top/posts/2025/06/let-ai-help-you-manage-your-gzh-layout-and-publishing/)
 
+支持的主题效果预览：
+
+- [内置主题](https://yuzhi.tech/docs/wenyan/theme)
+
 ## Features
 
 - 列出并选择支持的文章主题
