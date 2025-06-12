@@ -37,11 +37,22 @@ RegisterHTMLHandler(adaptor);
 const tex = new TeX(texConfig);
 const svg = new SVG(svgConfig);
 
+function addContainer(math, doc) {
+    console.log(math)
+    const tag = math.display ? 'section' : 'span';
+    const cls = math.display ? 'block-equation' : 'inline-equation';
+    // math.typesetRoot.setAttribute("math", math.math);
+    math.typesetRoot = doc.adaptor.node(tag, {class: cls}, [math.typesetRoot]);
+}
+
 async function renderMathInHtml(htmlString) {
     try {
         const html = mathjax.document(htmlString, {
             InputJax: tex,
-            OutputJax: svg
+            OutputJax: svg,
+            renderActions: {
+                addContainer: [190, (doc) => {for (const math of doc.math) {addContainer(math, doc)}}, addContainer]
+            }
         });
         html.render();
         return adaptor.outerHTML(adaptor.root(html.document))
