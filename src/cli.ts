@@ -9,7 +9,7 @@ import { readFile, writeFile } from "fs/promises";
 import { dirname, join, extname, basename } from "path";
 import { fileURLToPath } from "url";
 import { themes, Theme } from "./theme.js";
-import { publishToDraft } from "./publish.js";
+import { publishToDraft, getDraftList } from "./publish.js";
 
 // @ts-ignore
 import { initMarkdownRenderer, renderMarkdown, handleFrontMatter } from "./main.js";
@@ -22,11 +22,14 @@ interface FrontMatterResult {
 }
 
 interface CliOptions {
-    input: string;
+    input?: string;
     output?: string;
     theme: string;
     format: 'wechat' | 'zhihu';
     publish?: boolean;
+    draftBatchget?: boolean;
+    offset?: number;
+    count?: number;
     appId?: string;
     appSecret?: string;
     hostImagePath?: string;
@@ -46,6 +49,9 @@ Wenyan CLI - 文颜命令行工具
   -t, --theme <theme>    主题名称 (默认: default)
   -f, --format <format>  输出格式: wechat | zhihu (默认: wechat)
   -p, --publish         发布到微信公众号草稿箱 (仅支持 wechat 格式)
+  --draft-batchget      获取微信公众号草稿列表
+  --offset <number>     草稿列表偏移量 (默认: 0)
+  --count <number>      草稿列表获取数量 (默认: 20)
   --app-id <id>         微信公众号 App ID (发布时必需，或通过 WECHAT_APP_ID 环境变量设置)
   --app-secret <secret> 微信公众号 App Secret (发布时必需，或通过 WECHAT_APP_SECRET 环境变量设置)
   --host-image-path <path> 本地图片路径 (可选，或通过 HOST_IMAGE_PATH 环境变量设置)
@@ -64,6 +70,10 @@ ${Object.entries(themes).map(([id, theme]) =>
   # 转换并发布到微信公众号
   wenyan-cli -i article.md -t rainbow -f wechat -p --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
   
+  # 获取草稿列表
+  wenyan-cli --draft-batchget --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+  wenyan-cli --draft-batchget --offset 0 --count 10 --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+  
   # 使用环境变量
   export WECHAT_APP_ID=your_app_id
   export WECHAT_APP_SECRET=your_app_secret
@@ -80,7 +90,10 @@ function parseArgs(args: string[]): CliOptions {
     const options: Partial<CliOptions> = {
         theme: 'default',
         format: 'wechat',
-        publish: false
+        publish: false,
+        draftBatchget: false,
+        offset: 0,
+        count: 20
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -111,6 +124,23 @@ function parseArgs(args: string[]): CliOptions {
             case '--publish':
                 options.publish = true;
                 break;
+            case '--draft-batchget':
+                options.draftBatchget = true;
+                break;
+            case '--offset':
+                const offset = parseInt(args[++i], 10);
+                if (isNaN(offset) || offset < 0) {
+                    throw new Error(`无效的偏移量: ${args[i]}. 必须是非负整数`);
+                }
+                options.offset = offset;
+                break;
+            case '--count':
+                const count = parseInt(args[++i], 10);
+                if (isNaN(count) || count <= 0 || count > 100) {
+                    throw new Error(`无效的数量: ${args[i]}. 必须是1-100之间的正整数`);
+                }
+                options.count = count;
+                break;
             case '--app-id':
                 options.appId = args[++i];
                 break;
@@ -132,8 +162,8 @@ function parseArgs(args: string[]): CliOptions {
         }
     }
 
-    if (!options.input && !options.help) {
-        throw new Error('缺少必需参数: --input');
+    if (!options.input && !options.help && !options.draftBatchget) {
+        throw new Error('缺少必需参数: --input 或 --draft-batchget');
     }
 
     return options as CliOptions;
@@ -262,13 +292,6 @@ async function main() {
             process.exit(0);
         }
         
-        // 验证主题
-        const theme = themes[options.theme];
-        if (!theme) {
-            const availableThemes = Object.keys(themes).join(', ');
-            throw new Error(`无效的主题: ${options.theme}. 可用主题: ${availableThemes}`);
-        }
-        
         // 验证发布选项
         if (options.publish) {
             if (options.format !== 'wechat') {
@@ -280,6 +303,57 @@ async function main() {
             
             // 验证微信凭据
             validateWechatCredentials();
+        }
+
+        // 验证获取草稿列表选项
+        if (options.draftBatchget) {
+            // 设置微信环境变量
+            setupWechatEnvironment(options);
+            
+            // 验证微信凭据
+            validateWechatCredentials();
+            
+            // 获取草稿列表
+            console.log('正在获取微信公众号草稿列表...');
+            console.log(`偏移量: ${options.offset}, 数量: ${options.count}`);
+            
+            try {
+                const result = await getDraftList(options.offset, options.count);
+                console.log(`✅ 获取成功！共 ${result.total_count} 篇草稿`);
+                console.log(`📄 本次获取 ${result.item_count} 篇草稿：\n`);
+                
+                if (result.item && result.item.length > 0) {
+                    result.item.forEach((item: any, index: number) => {
+                        const article = item.content.news_item[0];
+                        console.log(`${index + 1}. 📝 ${article.title}`);
+                        console.log(`   🆔 Media ID: ${item.media_id}`);
+                        console.log(`   📅 更新时间: ${new Date(item.update_time * 1000).toLocaleString('zh-CN')}`);
+                        if (article.digest) {
+                            console.log(`   📖 摘要: ${article.digest}`);
+                        }
+                        console.log('');
+                    });
+                } else {
+                    console.log('暂无草稿');
+                }
+                
+                return;
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                throw new Error(`获取草稿列表失败: ${errorMessage}`);
+            }
+        }
+
+        // 如果不是获取草稿列表，则需要输入文件
+        if (!options.input) {
+            throw new Error('缺少必需参数: --input');
+        }
+        
+        // 验证主题
+        const theme = themes[options.theme];
+        if (!theme) {
+            const availableThemes = Object.keys(themes).join(', ');
+            throw new Error(`无效的主题: ${options.theme}. 可用主题: ${availableThemes}`);
         }
         
         // 初始化 Markdown 渲染器

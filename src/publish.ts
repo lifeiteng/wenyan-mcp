@@ -5,6 +5,7 @@ import path from "path";
 
 const tokenUrl = "https://api.weixin.qq.com/cgi-bin/token";
 const publishUrl = "https://api.weixin.qq.com/cgi-bin/draft/add";
+const batchGetUrl = "https://api.weixin.qq.com/cgi-bin/draft/batchget";
 const uploadUrl = `https://api.weixin.qq.com/cgi-bin/material/add_material`;
 const appId = process.env.WECHAT_APP_ID || "";
 const appSecret = process.env.WECHAT_APP_SECRET || "";
@@ -131,6 +132,27 @@ export async function publishToDraft(title: string, content: string, cover: stri
         } else {
             throw new Error(`上传到公众号草稿失败: ${data}`);
         }
+    } catch (error) {
+        throw error;
+    }
+}
+
+export async function getDraftList(offset: number = 0, count: number = 20) {
+    try {
+        const accessToken = await fetchAccessToken();
+        const response = await fetch(`${batchGetUrl}?access_token=${accessToken.access_token}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                offset: offset,
+                count: count,
+                no_content: 1
+            })
+        });
+        const data = await response.json();
+        if (data.errcode) {
+            throw new Error(`获取草稿列表失败，错误码：${data.errcode}，${data.errmsg}`);
+        }
+        return data;
     } catch (error) {
         throw error;
     }
