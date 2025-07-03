@@ -10,7 +10,7 @@ import { dirname, join, extname, basename } from "path";
 import { fileURLToPath } from "url";
 import { constants } from "fs";
 import { themes, Theme } from "./theme.js";
-import { publishToDraft, getDraftList, deleteDraft, deleteAllDrafts, publishMultipleArticlesToDraft, Article } from "./publish.js";
+import { publishToDraft, getDraftList, deleteDraft, deleteAllDrafts, publishMultipleArticlesToDraft, publishAllDrafts, publishDraft, Article } from "./publish.js";
 
 // @ts-ignore
 import { initMarkdownRenderer, renderMarkdown, handleFrontMatter } from "./main.js";
@@ -31,6 +31,8 @@ interface CliOptions {
     draftBatchget?: boolean;
     draftDelete?: boolean;
     draftDeleteAll?: boolean;
+    draftPublish?: boolean;
+    draftPublishAll?: boolean;
     mediaId?: string;
     offset?: number;
     count?: number;
@@ -56,6 +58,8 @@ Wenyan CLI - 文颜命令行工具
   --draft-batchget      获取微信公众号草稿列表
   --draft-delete        删除指定的微信公众号草稿
   --draft-delete-all    删除所有微信公众号草稿
+  --draft-publish       发布指定的微信公众号草稿
+  --draft-publish-all   发布所有微信公众号草稿
   --media-id <id>       草稿的 Media ID (删除指定草稿时必需)
   --offset <number>     草稿列表偏移量 (默认: 0)
   --count <number>      草稿列表获取数量 (默认: 20)
@@ -90,8 +94,14 @@ ${Object.entries(themes).map(([id, theme]) =>
   # 删除指定草稿
   wenyan-cli --draft-delete --media-id MEDIA_ID_HERE --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
   
+  # 发布指定草稿
+  wenyan-cli --draft-publish --media-id MEDIA_ID_HERE --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+  
   # 删除所有草稿
   wenyan-cli --draft-delete-all --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+  
+  # 发布所有草稿
+  wenyan-cli --draft-publish-all --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
   
   # 使用环境变量
   export WECHAT_APP_ID=your_app_id
@@ -113,6 +123,8 @@ function parseArgs(args: string[]): CliOptions {
         draftBatchget: false,
         draftDelete: false,
         draftDeleteAll: false,
+        draftPublish: false,
+        draftPublishAll: false,
         offset: 0,
         count: 20
     };
@@ -160,6 +172,12 @@ function parseArgs(args: string[]): CliOptions {
             case '--draft-delete-all':
                 options.draftDeleteAll = true;
                 break;
+            case '--draft-publish':
+                options.draftPublish = true;
+                break;
+            case '--draft-publish-all':
+                options.draftPublishAll = true;
+                break;
             case '--media-id':
                 options.mediaId = args[++i];
                 break;
@@ -202,9 +220,21 @@ function parseArgs(args: string[]): CliOptions {
     if (options.draftDelete && options.draftDeleteAll) {
         throw new Error('--draft-delete 和 --draft-delete-all 不能同时使用');
     }
+    if (options.draftDeleteAll && options.draftPublishAll) {
+        throw new Error('--draft-delete-all 和 --draft-publish-all 不能同时使用');
+    }
+    if (options.draftDelete && options.draftPublishAll) {
+        throw new Error('--draft-delete 和 --draft-publish-all 不能同时使用');
+    }
+    if (options.draftDelete && options.draftPublish) {
+        throw new Error('--draft-delete 和 --draft-publish 不能同时使用');
+    }
+    if (options.draftPublish && options.draftPublishAll) {
+        throw new Error('--draft-publish 和 --draft-publish-all 不能同时使用');
+    }
 
-    if (!options.input && !options.help && !options.draftBatchget && !options.draftDelete && !options.draftDeleteAll) {
-        throw new Error('缺少必需参数: --input 或 --draft-batchget 或 --draft-delete 或 --draft-delete-all');
+    if (!options.input && !options.help && !options.draftBatchget && !options.draftDelete && !options.draftDeleteAll && !options.draftPublish && !options.draftPublishAll) {
+        throw new Error('缺少必需参数: --input 或 --draft-batchget 或 --draft-delete 或 --draft-delete-all 或 --draft-publish 或 --draft-publish-all');
     }
 
     return options as CliOptions;
@@ -513,6 +543,88 @@ async function main() {
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 throw new Error(`删除所有草稿失败: ${errorMessage}`);
+            }
+        }
+
+        // 验证发布指定草稿选项
+        if (options.draftPublish) {
+            // 验证 Media ID
+            if (!options.mediaId) {
+                throw new Error('发布指定草稿需要提供 Media ID，请使用 --media-id 参数');
+            }
+            
+            // 设置微信环境变量
+            setupWechatEnvironment(options);
+            
+            // 验证微信凭据
+            validateWechatCredentials();
+            
+            // 发布草稿
+            console.log('正在发布微信公众号草稿...');
+            console.log(`Media ID: ${options.mediaId}`);
+            
+            try {
+                const result = await publishDraft(options.mediaId);
+                console.log(`✅ 发布成功！`);
+                console.log(`🆔 Media ID: ${options.mediaId}`);
+                console.log(`📝 Publish ID: ${result.publish_id}`);
+                console.log(`📱 请登录微信公众号后台查看发布结果`);
+                
+                return;
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                throw new Error(`发布草稿失败: ${errorMessage}`);
+            }
+        }
+
+        // 验证发布所有草稿选项
+        if (options.draftPublishAll) {
+            // 设置微信环境变量
+            setupWechatEnvironment(options);
+            
+            // 验证微信凭据
+            validateWechatCredentials();
+            
+            // 发布所有草稿
+            console.log('正在发布所有微信公众号草稿...');
+            console.log('⚠️  警告：此操作将发布所有草稿，无法撤销！');
+            
+            try {
+                const result = await publishAllDrafts();
+                
+                if (result.total_count === 0) {
+                    console.log('📭 没有找到任何草稿');
+                    return;
+                }
+                
+                console.log(`✅ 发布完成！`);
+                console.log(`📊 发布统计：`);
+                console.log(`   总计草稿数: ${result.total_count}`);
+                console.log(`   成功发布: ${result.published_count}`);
+                console.log(`   发布失败: ${result.failed_count || 0}`);
+                
+                if (result.successful_items && result.successful_items.length > 0) {
+                    console.log(`✅ 成功发布的草稿：`);
+                    result.successful_items.forEach((item: any, index: number) => {
+                        console.log(`   ${index + 1}. Media ID: ${item.media_id}`);
+                        console.log(`      Publish ID: ${item.publish_id}`);
+                    });
+                }
+                
+                if (result.failed_count && result.failed_count > 0 && result.failed_items) {
+                    console.log(`❌ 发布失败的草稿：`);
+                    result.failed_items.forEach((item: any, index: number) => {
+                        console.log(`   ${index + 1}. Media ID: ${item.media_id}`);
+                        console.log(`      错误: ${item.error}`);
+                    });
+                }
+                
+                console.log(`📱 请登录微信公众号后台查看发布结果`);
+                
+                return;
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                throw new Error(`发布所有草稿失败: ${errorMessage}`);
             }
         }
 

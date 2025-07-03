@@ -289,3 +289,85 @@ export async function deleteAllDrafts() {
         throw error;
     }
 }
+
+export async function publishDraft(mediaId: string) {
+    try {
+        const accessToken = await fetchAccessToken();
+        const response = await fetch(`https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${accessToken.access_token}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                media_id: mediaId
+            })
+        });
+        const data = await response.json();
+        if (data.errcode) {
+            throw new Error(`发布草稿失败，错误码：${data.errcode}，${data.errmsg}`);
+        }
+        return data;
+    } catch (error) {
+        throw error;
+    }
+}
+
+export async function publishAllDrafts() {
+    try {
+        const accessToken = await fetchAccessToken();
+        
+        // 首先获取所有草稿
+        let allDrafts = [];
+        let offset = 0;
+        const count = 20; // 每次获取20篇
+        
+        while (true) {
+            const result = await getDraftList(offset, count);
+            if (!result.item || result.item.length === 0) {
+                break;
+            }
+            allDrafts.push(...result.item);
+            offset += count;
+            
+            // 如果获取的数量少于请求数量，说明已经获取完所有草稿
+            if (result.item.length < count) {
+                break;
+            }
+        }
+        
+        if (allDrafts.length === 0) {
+            return { published_count: 0, total_count: 0 };
+        }
+        
+        // 发布所有草稿
+        const publishPromises = allDrafts.map(async (draft) => {
+            try {
+                const response = await fetch(`https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${accessToken.access_token}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        media_id: draft.media_id
+                    })
+                });
+                const data = await response.json();
+                if (data.errcode) {
+                    throw new Error(`发布失败，错误码：${data.errcode}，${data.errmsg}`);
+                }
+                return { success: true, media_id: draft.media_id, publish_id: data.publish_id };
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                return { success: false, media_id: draft.media_id, error: errorMessage };
+            }
+        });
+        
+        const results = await Promise.all(publishPromises);
+        const successful = results.filter(r => r.success);
+        const failed = results.filter(r => !r.success);
+        
+        return {
+            total_count: allDrafts.length,
+            published_count: successful.length,
+            failed_count: failed.length,
+            failed_items: failed,
+            successful_items: successful
+        };
+    } catch (error) {
+        throw error;
+    }
+}
