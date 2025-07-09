@@ -39,6 +39,7 @@ interface CliOptions {
     appId?: string;
     appSecret?: string;
     hostImagePath?: string;
+    cardLayout?: boolean;
     help?: boolean;
 }
 
@@ -55,6 +56,7 @@ Wenyan CLI - 文颜命令行工具
   -t, --theme <theme>    主题名称 (默认: default)
   -f, --format <format>  输出格式: wechat | zhihu (默认: wechat)
   -p, --publish         发布到微信公众号草稿箱 (仅支持 wechat 格式)
+  --card-layout         生成卡片式排版，支持左右滑动阅读 (仅支持 wechat 格式)
   --draft-batchget      获取微信公众号草稿列表
   --draft-delete        删除指定的微信公众号草稿
   --draft-delete-all    删除所有微信公众号草稿
@@ -78,8 +80,11 @@ ${Object.entries(themes).map(([id, theme]) =>
   wenyan-cli -i article.md -t rainbow -f wechat
   wenyan-cli -i article.md -o output.html -t lapis -f zhihu
   
-  # 转换多个文件
-  wenyan-cli -i article1.md,article2.md,article3.md -t rainbow -f wechat
+  # 生成卡片式排版
+  wenyan-cli -i article.md -t rainbow -f wechat --card-layout
+  
+  # 转换多个文件为卡片式排版
+  wenyan-cli -i article1.md,article2.md,article3.md -t rainbow -f wechat --card-layout
   
   # 转换并发布到微信公众号
   wenyan-cli -i article.md -t rainbow -f wechat -p --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
@@ -125,6 +130,7 @@ function parseArgs(args: string[]): CliOptions {
         draftDeleteAll: false,
         draftPublish: false,
         draftPublishAll: false,
+        cardLayout: false,
         offset: 0,
         count: 20
     };
@@ -162,6 +168,9 @@ function parseArgs(args: string[]): CliOptions {
             case '-p':
             case '--publish':
                 options.publish = true;
+                break;
+            case '--card-layout':
+                options.cardLayout = true;
                 break;
             case '--draft-batchget':
                 options.draftBatchget = true;
@@ -233,6 +242,11 @@ function parseArgs(args: string[]): CliOptions {
         throw new Error('--draft-publish 和 --draft-publish-all 不能同时使用');
     }
 
+    // 验证卡片式排版选项
+    if (options.cardLayout && options.format !== 'wechat') {
+        throw new Error('卡片式排版仅支持微信公众号格式 (--format wechat)');
+    }
+
     if (!options.input && !options.help && !options.draftBatchget && !options.draftDelete && !options.draftDeleteAll && !options.draftPublish && !options.draftPublishAll) {
         throw new Error('缺少必需参数: --input 或 --draft-batchget 或 --draft-delete 或 --draft-delete-all 或 --draft-publish 或 --draft-publish-all');
     }
@@ -262,7 +276,7 @@ async function validateInputFiles(inputPaths: string[]): Promise<void> {
     }
 }
 
-async function processMarkdownFile(inputPath: string, theme: Theme, format: string): Promise<{
+async function processMarkdownFile(inputPath: string, theme: Theme, format: string, cardLayout: boolean = false): Promise<{
     title: string;
     content: string;
     cover: string;
@@ -285,8 +299,13 @@ async function processMarkdownFile(inputPath: string, theme: Theme, format: stri
             // 知乎格式的特殊处理
             finalHtml = adaptForZhihu(html);
         } else if (format === 'wechat') {
-            // 微信格式的特殊处理
-            finalHtml = adaptForWechat(html);
+            if (cardLayout) {
+                // 微信卡片式排版
+                finalHtml = adaptForWechatCardLayout(html);
+            } else {
+                // 微信普通格式的特殊处理
+                finalHtml = adaptForWechat(html);
+            }
         }
         
         const title = preHandlerContent.title || basename(inputPath, extname(inputPath));
@@ -304,7 +323,7 @@ async function processMarkdownFile(inputPath: string, theme: Theme, format: stri
     }
 }
 
-async function convertMarkdown(inputPath: string, theme: Theme, format: string): Promise<string> {
+async function convertMarkdown(inputPath: string, theme: Theme, format: string, cardLayout: boolean = false): Promise<string> {
     try {
         // 读取输入文件
         const content = await readFile(inputPath, 'utf-8');
@@ -322,8 +341,13 @@ async function convertMarkdown(inputPath: string, theme: Theme, format: string):
             // 知乎格式的特殊处理
             finalHtml = adaptForZhihu(html);
         } else if (format === 'wechat') {
-            // 微信格式的特殊处理
-            finalHtml = adaptForWechat(html);
+            if (cardLayout) {
+                // 微信卡片式排版
+                finalHtml = adaptForWechatCardLayout(html);
+            } else {
+                // 微信普通格式的特殊处理
+                finalHtml = adaptForWechat(html);
+            }
         }
         
         // 创建完整的HTML文档
@@ -350,6 +374,155 @@ function adaptForWechat(html: string): string {
     // 微信公众号的样式适配
     // 微信公众号支持内联样式
     return html;
+}
+
+function adaptForWechatCardLayout(html: string): string {
+    // 微信公众号卡片式排版适配
+    // 将内容分割成卡片，并添加左右滑动样式
+    
+    // 查找所有的 h1, h2, h3 标题作为卡片分割点
+    const cardSections = html.split(/(<h[1-3][^>]*>.*?<\/h[1-3]>)/gi);
+    
+    if (cardSections.length <= 1) {
+        // 如果没有标题分割，将整个内容作为一张卡片
+        return createCardLayoutWrapper([html]);
+    }
+    
+    const cards: string[] = [];
+    let currentCard = '';
+    
+    for (let i = 0; i < cardSections.length; i++) {
+        const section = cardSections[i].trim();
+        if (!section) continue;
+        
+        // 检查是否是标题
+        if (/^<h[1-3]/i.test(section)) {
+            // 如果已有内容，保存当前卡片
+            if (currentCard.trim()) {
+                cards.push(currentCard.trim());
+            }
+            // 开始新卡片，以标题开头
+            currentCard = section;
+        } else {
+            // 添加到当前卡片
+            currentCard += section;
+        }
+    }
+    
+    // 添加最后一张卡片
+    if (currentCard.trim()) {
+        cards.push(currentCard.trim());
+    }
+    
+    return createCardLayoutWrapper(cards);
+}
+
+function createCardLayoutWrapper(cards: string[]): string {
+    const cardItems = cards.map((card, index) => `
+        <div class="wenyan-card" style="
+            min-width: 280px;
+            max-width: 320px;
+            padding: 20px;
+            margin: 0 10px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            border: 1px solid #f0f0f0;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+        ">
+            <div class="wenyan-card-content" style="
+                font-size: 14px;
+                line-height: 1.6;
+                color: #333;
+            ">
+                ${card}
+            </div>
+            <div class="wenyan-card-number" style="
+                position: absolute;
+                top: 12px;
+                right: 12px;
+                background: rgba(0,0,0,0.1);
+                color: #666;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 12px;
+            ">
+                ${index + 1}/${cards.length}
+            </div>
+        </div>
+    `).join('');
+
+    return `
+    <div class="wenyan-card-container" style="
+        width: 100%;
+        overflow-x: auto;
+        padding: 20px 0;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    ">
+        <style>
+            .wenyan-card-container::-webkit-scrollbar {
+                display: none;
+            }
+            .wenyan-card-wrapper {
+                display: flex;
+                align-items: flex-start;
+                padding: 0 20px;
+                gap: 0;
+            }
+            .wenyan-card {
+                transition: transform 0.2s ease;
+            }
+            .wenyan-card:hover {
+                transform: translateY(-2px);
+            }
+            .wenyan-card h1, .wenyan-card h2, .wenyan-card h3 {
+                margin-top: 0;
+                margin-bottom: 16px;
+                color: #2c3e50;
+            }
+            .wenyan-card h1 { font-size: 18px; }
+            .wenyan-card h2 { font-size: 16px; }
+            .wenyan-card h3 { font-size: 14px; }
+            .wenyan-card p {
+                margin-bottom: 12px;
+            }
+            .wenyan-card img {
+                max-width: 100%;
+                border-radius: 8px;
+                margin: 8px 0;
+            }
+            .wenyan-card pre {
+                background: #f8f9fa;
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                overflow-x: auto;
+            }
+            .wenyan-card blockquote {
+                border-left: 3px solid #3498db;
+                padding-left: 12px;
+                margin: 12px 0;
+                font-style: italic;
+                color: #666;
+            }
+        </style>
+        <div class="wenyan-card-wrapper">
+            ${cardItems}
+        </div>
+        <div style="
+            text-align: center;
+            margin-top: 16px;
+            color: #888;
+            font-size: 12px;
+        ">
+            👈 左右滑动查看更多内容 👉
+        </div>
+    </div>`;
 }
 
 function createFullHtmlDocument(content: string, title: string, format: string): string {
@@ -652,10 +825,13 @@ async function main() {
         console.log(`正在转换 ${inputPaths.length} 个文件...`);
         console.log(`主题: ${theme.name} (${theme.id})`);
         console.log(`格式: ${options.format}`);
+        if (options.cardLayout) {
+            console.log(`排版: 卡片式 (支持左右滑动)`);
+        }
         
         // 处理所有输入文件
         const processedFiles = await Promise.all(
-            inputPaths.map(inputPath => processMarkdownFile(inputPath, theme, options.format))
+            inputPaths.map(inputPath => processMarkdownFile(inputPath, theme, options.format, options.cardLayout))
         );
         
         if (options.publish) {
