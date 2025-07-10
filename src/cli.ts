@@ -60,7 +60,7 @@ Wenyan CLI - 文颜命令行工具
   --draft-batchget      获取微信公众号草稿列表
   --draft-delete        删除指定的微信公众号草稿
   --draft-delete-all    删除所有微信公众号草稿
-  --draft-publish       发布指定的微信公众号草稿
+  --draft-publish       发布指定的微信公众号草稿 (可与 -p 同时使用实现发布后立即上线)
   --draft-publish-all   发布所有微信公众号草稿
   --media-id <id>       草稿的 Media ID (删除指定草稿时必需)
   --offset <number>     草稿列表偏移量 (默认: 0)
@@ -88,6 +88,9 @@ ${Object.entries(themes).map(([id, theme]) =>
   
   # 转换并发布到微信公众号
   wenyan-cli -i article.md -t rainbow -f wechat -p --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+  
+  # 转换、发布到草稿箱并立即发布上线
+  wenyan-cli -i article.md -t rainbow -f wechat -p --draft-publish --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
   
   # 发布多个文章到微信公众号
   wenyan-cli -i article1.md,article2.md -t rainbow -f wechat -p --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
@@ -720,7 +723,7 @@ async function main() {
         }
 
         // 验证发布指定草稿选项
-        if (options.draftPublish) {
+        if (options.draftPublish && !options.publish) {
             // 验证 Media ID
             if (!options.mediaId) {
                 throw new Error('发布指定草稿需要提供 Media ID，请使用 --media-id 参数');
@@ -846,7 +849,23 @@ async function main() {
                     console.log(`✅ 发布成功！`);
                     console.log(`📄 标题: ${file.title}`);
                     console.log(`🆔 Media ID: ${mediaId}`);
-                    console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                    
+                    // 如果同时指定了 --draft-publish，则立即发布草稿
+                    if (options.draftPublish) {
+                        console.log('正在立即发布草稿...');
+                        try {
+                            const publishResult = await publishDraft(mediaId);
+                            console.log(`✅ 立即发布成功！`);
+                            console.log(`📝 Publish ID: ${publishResult.publish_id}`);
+                            console.log(`📱 文章已发布，请登录微信公众号后台查看`);
+                        } catch (error) {
+                            const errorMessage = error instanceof Error ? error.message : String(error);
+                            console.error(`❌ 立即发布失败: ${errorMessage}`);
+                            console.log(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${mediaId} 命令发布`);
+                        }
+                    } else {
+                        console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                    }
                 } else {
                     // 多个文件，使用新的批量发布方法
                     const articles: Article[] = processedFiles.map(file => ({
@@ -862,7 +881,23 @@ async function main() {
                         console.log(`   ${index + 1}. ${file.title}`);
                     });
                     console.log(`🆔 Media ID: ${result.media_id}`);
-                    console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                    
+                    // 如果同时指定了 --draft-publish，则立即发布草稿
+                    if (options.draftPublish) {
+                        console.log('正在立即发布草稿...');
+                        try {
+                            const publishResult = await publishDraft(result.media_id);
+                            console.log(`✅ 立即发布成功！`);
+                            console.log(`📝 Publish ID: ${publishResult.publish_id}`);
+                            console.log(`📱 文章已发布，请登录微信公众号后台查看`);
+                        } catch (error) {
+                            const errorMessage = error instanceof Error ? error.message : String(error);
+                            console.error(`❌ 立即发布失败: ${errorMessage}`);
+                            console.log(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${result.media_id} 命令发布`);
+                        }
+                    } else {
+                        console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                    }
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
