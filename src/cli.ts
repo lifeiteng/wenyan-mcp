@@ -15,6 +15,51 @@ import { publishToDraft, getDraftList, deleteDraft, deleteAllDrafts, publishMult
 // @ts-ignore
 import { initMarkdownRenderer, renderMarkdown, handleFrontMatter } from "./main.js";
 
+/**
+ * 获取调用方的文件名和行号
+ */
+function getCallerInfo(): string {
+    const stack = new Error().stack;
+    if (!stack) return '';
+    
+    const lines = stack.split('\n');
+    // 找到调用 log 函数的那一行
+    for (let i = 3; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('file://')) {
+            const match = line.match(/file:\/\/(.+):(\d+):(\d+)/);
+            if (match) {
+                const fileName = basename(match[1]);
+                const lineNumber = match[2];
+                return `[${fileName}:${lineNumber}]`;
+            }
+        }
+    }
+    return '';
+}
+
+/**
+ * 带行号的日志函数
+ */
+const log = {
+    info: (...args: any[]) => {
+        const caller = getCallerInfo();
+        console.log(caller, ...args);
+    },
+    error: (...args: any[]) => {
+        const caller = getCallerInfo();
+        console.error(caller, ...args);
+    },
+    warn: (...args: any[]) => {
+        const caller = getCallerInfo();
+        console.warn(caller, ...args);
+    },
+    debug: (...args: any[]) => {
+        const caller = getCallerInfo();
+        console.debug(caller, ...args);
+    }
+};
+
 interface FrontMatterResult {
     title?: string;
     description?: string;
@@ -44,7 +89,7 @@ interface CliOptions {
 }
 
 function printUsage() {
-    console.log(`
+    log.info(`
 Wenyan CLI - 文颜命令行工具
 
 用法:
@@ -619,27 +664,27 @@ async function main() {
             validateWechatCredentials();
             
             // 获取草稿列表
-            console.log('正在获取微信公众号草稿列表...');
-            console.log(`偏移量: ${options.offset}, 数量: ${options.count}`);
+            log.info('正在获取微信公众号草稿列表...');
+            log.info(`偏移量: ${options.offset}, 数量: ${options.count}`);
             
             try {
                 const result = await getDraftList(options.offset, options.count);
-                console.log(`✅ 获取成功！共 ${result.total_count} 篇草稿`);
-                console.log(`📄 本次获取 ${result.item_count} 篇草稿：\n`);
+                log.info(`✅ 获取成功！共 ${result.total_count} 篇草稿`);
+                log.info(`📄 本次获取 ${result.item_count} 篇草稿：\n`);
                 
                 if (result.item && result.item.length > 0) {
                     result.item.forEach((item: any, index: number) => {
                         const article = item.content.news_item[0];
-                        console.log(`${index + 1}. 📝 ${article.title}`);
-                        console.log(`   🆔 Media ID: ${item.media_id}`);
-                        console.log(`   📅 更新时间: ${new Date(item.update_time * 1000).toLocaleString('zh-CN')}`);
+                        log.info(`${index + 1}. 📝 ${article.title}`);
+                        log.info(`   🆔 Media ID: ${item.media_id}`);
+                        log.info(`   📅 更新时间: ${new Date(item.update_time * 1000).toLocaleString('zh-CN')}`);
                         if (article.digest) {
-                            console.log(`   📖 摘要: ${article.digest}`);
+                            log.info(`   📖 摘要: ${article.digest}`);
                         }
-                        console.log('');
+                        log.info('');
                     });
                 } else {
-                    console.log('暂无草稿');
+                    log.info('暂无草稿');
                 }
                 
                 return;
@@ -663,14 +708,14 @@ async function main() {
             validateWechatCredentials();
             
             // 删除草稿
-            console.log('正在删除微信公众号草稿...');
-            console.log(`Media ID: ${options.mediaId}`);
+            log.info('正在删除微信公众号草稿...');
+            log.info(`Media ID: ${options.mediaId}`);
             
             try {
                 await deleteDraft(options.mediaId);
-                console.log(`✅ 删除成功！`);
-                console.log(`🗑️  已删除 Media ID: ${options.mediaId}`);
-                console.log(`📱 请登录微信公众号后台确认删除结果`);
+                log.info(`✅ 删除成功！`);
+                log.info(`🗑️  已删除 Media ID: ${options.mediaId}`);
+                log.info(`📱 请登录微信公众号后台确认删除结果`);
                 
                 return;
             } catch (error) {
@@ -688,32 +733,32 @@ async function main() {
             validateWechatCredentials();
             
             // 删除所有草稿
-            console.log('正在删除所有微信公众号草稿...');
-            console.log('⚠️  警告：此操作将删除所有草稿，无法恢复！');
+            log.info('正在删除所有微信公众号草稿...');
+            log.info('⚠️  警告：此操作将删除所有草稿，无法恢复！');
             
             try {
                 const result = await deleteAllDrafts();
                 
                 if (result.total_count === 0) {
-                    console.log('📭 没有找到任何草稿');
+                    log.info('📭 没有找到任何草稿');
                     return;
                 }
                 
-                console.log(`✅ 删除完成！`);
-                console.log(`📊 删除统计：`);
-                console.log(`   总计草稿数: ${result.total_count}`);
-                console.log(`   成功删除: ${result.deleted_count}`);
-                console.log(`   删除失败: ${result.failed_count || 0}`);
+                log.info(`✅ 删除完成！`);
+                log.info(`📊 删除统计：`);
+                log.info(`   总计草稿数: ${result.total_count}`);
+                log.info(`   成功删除: ${result.deleted_count}`);
+                log.info(`   删除失败: ${result.failed_count || 0}`);
                 
                 if (result.failed_count && result.failed_count > 0 && result.failed_items) {
-                    console.log(`❌ 删除失败的草稿：`);
+                    log.info(`❌ 删除失败的草稿：`);
                     result.failed_items.forEach((item: any, index: number) => {
-                        console.log(`   ${index + 1}. Media ID: ${item.media_id}`);
-                        console.log(`      错误: ${item.error}`);
+                        log.info(`   ${index + 1}. Media ID: ${item.media_id}`);
+                        log.info(`      错误: ${item.error}`);
                     });
                 }
                 
-                console.log(`📱 请登录微信公众号后台确认删除结果`);
+                log.info(`📱 请登录微信公众号后台确认删除结果`);
                 
                 return;
             } catch (error) {
@@ -736,15 +781,15 @@ async function main() {
             validateWechatCredentials();
             
             // 发布草稿
-            console.log('正在发布微信公众号草稿...');
-            console.log(`Media ID: ${options.mediaId}`);
+            log.info('正在发布微信公众号草稿...');
+            log.info(`Media ID: ${options.mediaId}`);
             
             try {
                 const result = await publishDraft(options.mediaId);
-                console.log(`✅ 发布成功！`);
-                console.log(`🆔 Media ID: ${options.mediaId}`);
-                console.log(`📝 Publish ID: ${result.publish_id}`);
-                console.log(`📱 请登录微信公众号后台查看发布结果`);
+                log.info(`✅ 发布成功！`);
+                log.info(`🆔 Media ID: ${options.mediaId}`);
+                log.info(`📝 Publish ID: ${result.publish_id}`);
+                log.info(`📱 请登录微信公众号后台查看发布结果`);
                 
                 return;
             } catch (error) {
@@ -762,40 +807,40 @@ async function main() {
             validateWechatCredentials();
             
             // 发布所有草稿
-            console.log('正在发布所有微信公众号草稿...');
-            console.log('⚠️  警告：此操作将发布所有草稿，无法撤销！');
+            log.info('正在发布所有微信公众号草稿...');
+            log.info('⚠️  警告：此操作将发布所有草稿，无法撤销！');
             
             try {
                 const result = await publishAllDrafts();
                 
                 if (result.total_count === 0) {
-                    console.log('📭 没有找到任何草稿');
+                    log.info('📭 没有找到任何草稿');
                     return;
                 }
                 
-                console.log(`✅ 发布完成！`);
-                console.log(`📊 发布统计：`);
-                console.log(`   总计草稿数: ${result.total_count}`);
-                console.log(`   成功发布: ${result.published_count}`);
-                console.log(`   发布失败: ${result.failed_count || 0}`);
+                log.info(`✅ 发布完成！`);
+                log.info(`📊 发布统计：`);
+                log.info(`   总计草稿数: ${result.total_count}`);
+                log.info(`   成功发布: ${result.published_count}`);
+                log.info(`   发布失败: ${result.failed_count || 0}`);
                 
                 if (result.successful_items && result.successful_items.length > 0) {
-                    console.log(`✅ 成功发布的草稿：`);
+                    log.info(`✅ 成功发布的草稿：`);
                     result.successful_items.forEach((item: any, index: number) => {
-                        console.log(`   ${index + 1}. Media ID: ${item.media_id}`);
-                        console.log(`      Publish ID: ${item.publish_id}`);
+                        log.info(`   ${index + 1}. Media ID: ${item.media_id}`);
+                        log.info(`      Publish ID: ${item.publish_id}`);
                     });
                 }
                 
                 if (result.failed_count && result.failed_count > 0 && result.failed_items) {
-                    console.log(`❌ 发布失败的草稿：`);
+                    log.info(`❌ 发布失败的草稿：`);
                     result.failed_items.forEach((item: any, index: number) => {
-                        console.log(`   ${index + 1}. Media ID: ${item.media_id}`);
-                        console.log(`      错误: ${item.error}`);
+                        log.info(`   ${index + 1}. Media ID: ${item.media_id}`);
+                        log.info(`      错误: ${item.error}`);
                     });
                 }
                 
-                console.log(`📱 请登录微信公众号后台查看发布结果`);
+                log.info(`📱 请登录微信公众号后台查看发布结果`);
                 
                 return;
             } catch (error) {
@@ -825,11 +870,11 @@ async function main() {
         // 验证输入文件是否存在
         await validateInputFiles(inputPaths);
         
-        console.log(`正在转换 ${inputPaths.length} 个文件...`);
-        console.log(`主题: ${theme.name} (${theme.id})`);
-        console.log(`格式: ${options.format}`);
+        log.info(`正在转换 ${inputPaths.length} 个文件...`);
+        // log.info(`主题: ${theme.name} (${theme.id})`);
+        log.info(`格式: ${options.format}`);
         if (options.cardLayout) {
-            console.log(`排版: 卡片式 (支持左右滑动)`);
+            log.info(`排版: 卡片式 (支持左右滑动)`);
         }
         
         // 处理所有输入文件
@@ -839,32 +884,32 @@ async function main() {
         
         if (options.publish) {
             // 发布到微信公众号
-            console.log('正在发布到微信公众号草稿箱...');
+            log.info('正在发布到微信公众号草稿箱...');
             
             try {
                 if (processedFiles.length === 1) {
                     // 单个文件，使用原有的发布方法
                     const file = processedFiles[0];
                     const mediaId = await publishToWechat(file.title, file.content, file.cover);
-                    console.log(`✅ 发布成功！`);
-                    console.log(`📄 标题: ${file.title}`);
-                    console.log(`🆔 Media ID: ${mediaId}`);
+                    log.info(`✅ 发布成功！`);
+                    log.info(`📄 标题: ${file.title}`);
+                    log.info(`🆔 Media ID: ${mediaId}`);
                     
                     // 如果同时指定了 --draft-publish，则立即发布草稿
                     if (options.draftPublish) {
-                        console.log('正在立即发布草稿...');
+                        log.info('正在立即发布草稿...');
                         try {
                             const publishResult = await publishDraft(mediaId);
-                            console.log(`✅ 立即发布成功！`);
-                            console.log(`📝 Publish ID: ${publishResult.publish_id}`);
-                            console.log(`📱 文章已发布，请登录微信公众号后台查看`);
+                            log.info(`✅ 立即发布成功！`);
+                            log.info(`📝 Publish ID: ${publishResult.publish_id}`);
+                            log.info(`📱 文章已发布，请登录微信公众号后台查看`);
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
-                            console.error(`❌ 立即发布失败: ${errorMessage}`);
-                            console.log(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${mediaId} 命令发布`);
+                            log.error(`❌ 立即发布失败: ${errorMessage}`);
+                            log.info(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${mediaId} 命令发布`);
                         }
                     } else {
-                        console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                        log.info(`📱 请登录微信公众号后台查看草稿箱`);
                     }
                 } else {
                     // 多个文件，使用新的批量发布方法
@@ -875,28 +920,28 @@ async function main() {
                     }));
                     
                     const result = await publishMultipleArticlesToDraft(articles);
-                    console.log(`✅ 批量发布成功！`);
-                    console.log(`📄 发布了 ${processedFiles.length} 篇文章`);
+                    log.info(`✅ 批量发布成功！`);
+                    log.info(`📄 发布了 ${processedFiles.length} 篇文章`);
                     processedFiles.forEach((file, index) => {
-                        console.log(`   ${index + 1}. ${file.title}`);
+                        log.info(`   ${index + 1}. ${file.title}`);
                     });
-                    console.log(`🆔 Media ID: ${result.media_id}`);
+                    log.info(`🆔 Media ID: ${result.media_id}`);
                     
                     // 如果同时指定了 --draft-publish，则立即发布草稿
                     if (options.draftPublish) {
-                        console.log('正在立即发布草稿...');
+                        log.info('正在立即发布草稿...');
                         try {
                             const publishResult = await publishDraft(result.media_id);
-                            console.log(`✅ 立即发布成功！`);
-                            console.log(`📝 Publish ID: ${publishResult.publish_id}`);
-                            console.log(`📱 文章已发布，请登录微信公众号后台查看`);
+                            log.info(`✅ 立即发布成功！`);
+                            log.info(`📝 Publish ID: ${publishResult.publish_id}`);
+                            log.info(`📱 文章已发布，请登录微信公众号后台查看`);
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
-                            console.error(`❌ 立即发布失败: ${errorMessage}`);
-                            console.log(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${result.media_id} 命令发布`);
+                            log.error(`❌ 立即发布失败: ${errorMessage}`);
+                            log.info(`📱 草稿已保存在草稿箱，可以手动发布或使用 --draft-publish --media-id ${result.media_id} 命令发布`);
                         }
                     } else {
-                        console.log(`📱 请登录微信公众号后台查看草稿箱`);
+                        log.info(`📱 请登录微信公众号后台查看草稿箱`);
                     }
                 }
             } catch (error) {
@@ -909,15 +954,15 @@ async function main() {
                 // 单个文件
                 const file = processedFiles[0];
                 const outputPath = options.output || generateOutputPath(inputPaths[0], options.format);
-                console.log(`输出: ${outputPath}`);
+                log.info(`输出: ${outputPath}`);
                 
                 const fullHtml = createFullHtmlDocument(file.content, file.title, options.format);
                 await writeFile(outputPath, fullHtml, 'utf-8');
                 
-                console.log(`✅ 转换完成！输出文件: ${outputPath}`);
+                log.info(`✅ 转换完成！输出文件: ${outputPath}`);
             } else {
                 // 多个文件
-                console.log(`正在保存 ${processedFiles.length} 个文件...`);
+                log.info(`正在保存 ${processedFiles.length} 个文件...`);
                 
                 const savePromises = processedFiles.map(async (file, index) => {
                     const inputPath = inputPaths[index];
@@ -929,16 +974,16 @@ async function main() {
                 
                 const outputPaths = await Promise.all(savePromises);
                 
-                console.log(`✅ 转换完成！输出文件:`);
+                log.info(`✅ 转换完成！输出文件:`);
                 outputPaths.forEach((outputPath, index) => {
-                    console.log(`   ${index + 1}. ${outputPath}`);
+                    log.info(`   ${index + 1}. ${outputPath}`);
                 });
             }
         }
         
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`❌ 错误: ${errorMessage}`);
+        log.error(`❌ 错误: ${errorMessage}`);
         process.exit(1);
     }
 }
