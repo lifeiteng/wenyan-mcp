@@ -73,7 +73,7 @@ async function uploadImage(imageUrl: string, accessToken: string, fileName?: str
     }
 }
 
-async function uploadImages(content: string, accessToken: string): Promise<string> {
+async function uploadImages(content: string, accessToken: string): Promise<{updatedContent: string, firstImageId: string}> {
     const dom = new JSDOM(content);
     const document = dom.window.document;
     const images = Array.from(document.querySelectorAll('img'));
@@ -93,13 +93,16 @@ async function uploadImages(content: string, accessToken: string): Promise<strin
 
     const mediaIds = (await Promise.all(uploadPromises)).filter(Boolean);
     const firstImageId = mediaIds[0] || "";
-    return firstImageId;
+    
+    // 返回更新后的HTML内容
+    const updatedContent = document.body.innerHTML;
+    return { updatedContent, firstImageId };
 }
 
 export async function publishToDraft(title: string, content: string, cover: string) {
     try {
         const accessToken = await fetchAccessToken();
-        const firstImageId = await uploadImages(content, accessToken.access_token);
+        const { updatedContent, firstImageId } = await uploadImages(content, accessToken.access_token);
         let thumbMediaId = "";
         if (cover) {
             const resp = await uploadImage(cover, accessToken.access_token, "cover.jpg");
@@ -120,7 +123,7 @@ export async function publishToDraft(title: string, content: string, cover: stri
             body: JSON.stringify({
                 articles: [{
                     title: title,
-                    content: content,
+                    content: updatedContent,
                     thumb_media_id: thumbMediaId,
                 }]
             })
@@ -150,7 +153,7 @@ export async function publishMultipleArticlesToDraft(articles: Article[]) {
         
         // 处理每个文章，上传图片并获取封面
         const processedArticles = await Promise.all(articles.map(async (article) => {
-            const firstImageId = await uploadImages(article.content, accessToken.access_token);
+            const { updatedContent, firstImageId } = await uploadImages(article.content, accessToken.access_token);
             let thumbMediaId = "";
             
             if (article.cover) {
@@ -171,7 +174,7 @@ export async function publishMultipleArticlesToDraft(articles: Article[]) {
             
             return {
                 title: article.title,
-                content: article.content,
+                content: updatedContent,
                 thumb_media_id: thumbMediaId,
             };
         }));
