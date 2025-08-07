@@ -32,13 +32,7 @@ const svgConfig = {
     fontCache: 'none'
 };
 
-const adaptor = liteAdaptor();
-RegisterHTMLHandler(adaptor);
-const tex = new TeX(texConfig);
-const svg = new SVG(svgConfig);
-
 function addContainer(math, doc) {
-    console.log(math)
     const tag = math.display ? 'section' : 'span';
     const cls = math.display ? 'block-equation' : 'inline-equation';
     // math.typesetRoot.setAttribute("math", math.math);
@@ -46,7 +40,23 @@ function addContainer(math, doc) {
 }
 
 async function renderMathInHtml(htmlString) {
+    // 暂时禁用 MathJax 渲染以避免兼容性问题
+    // 直接返回原始 HTML，不处理数学公式
+    return htmlString;
+    
+    /* 暂时注释掉 MathJax 代码
     try {
+        // 如果没有数学公式，直接返回原始HTML
+        if (!htmlString.includes('$') && !htmlString.includes('\\(') && !htmlString.includes('\\[')) {
+            return htmlString;
+        }
+        
+        const adaptor = liteAdaptor();
+        RegisterHTMLHandler(adaptor);
+        
+        const tex = new TeX(texConfig);
+        const svg = new SVG(svgConfig);
+        
         const html = mathjax.document(htmlString, {
             InputJax: tex,
             OutputJax: svg,
@@ -54,12 +64,15 @@ async function renderMathInHtml(htmlString) {
                 addContainer: [190, (doc) => {for (const math of doc.math) {addContainer(math, doc)}}, addContainer]
             }
         });
+        
         html.render();
         return adaptor.outerHTML(adaptor.root(html.document))
     } catch (error) {
         console.error("Error rendering MathJax:", error);
-        throw error;
+        // 如果渲染失败，返回原始HTML
+        return htmlString;
     }
+    */
 }
 
 export function initMarkdownRenderer() {
@@ -171,36 +184,41 @@ export function handleFrontMatter(markdown) {
 }
 
 export async function renderMarkdown(content, themeId) {
-    const html = marked.parse(content);
-    const htmlWithMath = await renderMathInHtml(html);
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const themeCssPath = join(__dirname, `themes/${themeId}.css`);
-    const themeCss = await readFile(themeCssPath, "utf8");
-    let customCss = replaceCSSVariables(themeCss);
-    customCss = modifyCss(customCss, {
-        '#wenyan pre code': [
-            {
-                property: 'font-family',
-                value: monospace,
-                append: true
-            }
-        ],
-        '#wenyan pre': [
-            {
-                property: 'font-size',
-                value: "12px",
-                append: true
-            }
-        ]
-    });
-    const highlightCssPath = join(
-        __dirname,
-        "highlight/styles/solarized-light.min.css"
-    );
-    const highlightCss = await readFile(highlightCssPath, "utf8");
-    const macStyleCssPath = join(__dirname, "mac_style.css");
-    const macStyleCss = await readFile(macStyleCssPath, "utf8");
-    return await getContentForGzh(htmlWithMath, customCss, highlightCss, macStyleCss);
+    try {
+        const html = marked.parse(content);
+        const htmlWithMath = await renderMathInHtml(html);
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        const themeCssPath = join(__dirname, `themes/${themeId}.css`);
+        const themeCss = await readFile(themeCssPath, "utf8");
+        let customCss = replaceCSSVariables(themeCss);
+        customCss = modifyCss(customCss, {
+            '#wenyan pre code': [
+                {
+                    property: 'font-family',
+                    value: monospace,
+                    append: true
+                }
+            ],
+            '#wenyan pre': [
+                {
+                    property: 'font-size',
+                    value: "12px",
+                    append: true
+                }
+            ]
+        });
+        const highlightCssPath = join(
+            __dirname,
+            "highlight/styles/solarized-light.min.css"
+        );
+        const highlightCss = await readFile(highlightCssPath, "utf8");
+        const macStyleCssPath = join(__dirname, "mac_style.css");
+        const macStyleCss = await readFile(macStyleCssPath, "utf8");
+        return await getContentForGzh(htmlWithMath, customCss, highlightCss, macStyleCss);
+    } catch (error) {
+        console.error("Error rendering markdown:", error);
+        throw error;
+    }
 }
 
 async function getContentForGzh(html, customCss, highlightCss, macStyleCss) {
